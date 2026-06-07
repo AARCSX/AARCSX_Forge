@@ -15,7 +15,7 @@ type Event interface {
 
 type Handler func(context.Context, Event) error
 
-type Bus interface {
+type EventBus interface {
 	Subscribe(eventName string, handler Handler)
 	Publish(ctx context.Context, event Event) error
 }

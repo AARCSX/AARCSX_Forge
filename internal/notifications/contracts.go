@@ -1,6 +1,9 @@
 package notifications
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type Service interface {
 	QueueEmail(ctx context.Context, in QueueEmailInput) (DeliveryJob, error)
@@ -30,8 +33,10 @@ type EmailMessage struct {
 }
 
 type DeliveryJob struct {
-	ID       string
-	TenantID string
-	Channel  string
-	Status   string
+	ID        string
+	TenantID  string
+	Channel   string
+	Status    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }

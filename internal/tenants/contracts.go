@@ -1,40 +1,30 @@
 package tenants
 
-import "context"
+import (
+	"context"
+	"errors"
 
-type Service interface {
-	Resolve(ctx context.Context, in ResolveInput) (TenantContext, error)
-	Provision(ctx context.Context, in ProvisionInput) (Tenant, error)
-}
+	"github.com/google/uuid"
+)
 
+// Repository defines the contract for tenant persistence.
 type Repository interface {
-	GetByID(ctx context.Context, tenantID string) (Tenant, error)
-	GetMembership(ctx context.Context, tenantID, userID string) (Membership, error)
-	Create(ctx context.Context, tenant Tenant) (Tenant, error)
+	Create(ctx context.Context, t *Tenant) error
+	GetByID(ctx context.Context, id uuid.UUID) (*Tenant, error)
+	GetBySlug(ctx context.Context, slug string) (*Tenant, error)
+	Update(ctx context.Context, t *Tenant) error
 }
 
-type ResolveInput struct {
-	JWTTenantID string
-	HeaderValue string
+// Service defines the contract for tenant business logic.
+type Service interface {
+	CreateTenant(ctx context.Context, req *CreateTenantRequest) (*TenantResponse, error)
+	GetTenantByID(ctx context.Context, id uuid.UUID) (*TenantResponse, error)
+	GetTenantBySlug(ctx context.Context, slug string) (*TenantResponse, error)
+	UpdateTenant(ctx context.Context, id uuid.UUID, req *UpdateTenantRequest) (*TenantResponse, error)
 }
 
-type ProvisionInput struct {
-	Name    string
-	OwnerID string
-}
-
-type Tenant struct {
-	ID   string
-	Name string
-}
-
-type Membership struct {
-	TenantID string
-	UserID   string
-	Roles    []string
-}
-
-type TenantContext struct {
-	TenantID string
-	Source   string
-}
+// Errors
+var (
+	ErrTenantNotFound = errors.New("tenant not found")
+	ErrTenantExists   = errors.New("tenant already exists")
+)
