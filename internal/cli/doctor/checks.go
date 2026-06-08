@@ -14,10 +14,10 @@ import (
 
 // CheckResult represents the result of a single diagnostic check
 type CheckResult struct {
-	Name     string
-	Passed   bool
-	Message  string
-	Details  map[string]string
+	Name    string
+	Passed  bool
+	Message string
+	Details map[string]string
 }
 
 // Check defines the interface for a diagnostic check
@@ -105,7 +105,7 @@ func (c *DockerCheck) Check(ctx context.Context) CheckResult {
 			Passed:  false,
 			Message: "Docker daemon not running",
 			Details: map[string]string{
-				"error": err.Error(),
+				"error":  err.Error(),
 				"output": string(output),
 			},
 		}
@@ -168,15 +168,15 @@ func (c *PostgreSQLCheck) Check(ctx context.Context) CheckResult {
 		}
 	}
 
-    // All validations passed; return success
-    return CheckResult{
-        Name:    c.Name(),
-        Passed:  true,
-        Message: "PostgreSQL URL configured correctly",
-        Details: map[string]string{
-            "url": cfg.Database.URL,
-        },
-    }
+	// All validations passed; return success
+	return CheckResult{
+		Name:    c.Name(),
+		Passed:  true,
+		Message: "PostgreSQL URL configured correctly",
+		Details: map[string]string{
+			"url": cfg.Database.URL,
+		},
+	}
 }
 
 // RedisCheck validates Redis connectivity
@@ -275,7 +275,7 @@ func (c *ForgeMetadataCheck) Check(ctx context.Context) CheckResult {
 			}
 
 			// Check for required fields
-			required := []string{"project_name", "edition", "forge_version", "created_at"}
+			required := []string{"project_name", "forge_version", "created_at"}
 			for _, field := range required {
 				if _, exists := metadata[field]; !exists {
 					return CheckResult{
@@ -291,8 +291,7 @@ func (c *ForgeMetadataCheck) Check(ctx context.Context) CheckResult {
 				Passed:  true,
 				Message: "Forge project metadata is valid",
 				Details: map[string]string{
-					"project_name": metadata["project_name"].(string),
-					"edition":      metadata["edition"].(string),
+					"project_name":  metadata["project_name"].(string),
 					"forge_version": metadata["forge_version"].(string),
 				},
 			}

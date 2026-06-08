@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -21,7 +22,6 @@ import (
 
 // NewCreateCommand creates the create command
 func NewCreateCommand() *cobra.Command {
-	var edition string
 	var postgresURL string
 	var redisURL string
 	var storageProvider string
@@ -39,24 +39,20 @@ that conforms to Forge architecture standards.`,
 			if len(args) == 1 {
 				projectName = args[0]
 			}
-			return runCreate(cmd.Context(), projectName, edition, postgresURL, redisURL, storageProvider, skipPrompts)
+			return runCreate(cmd.Context(), projectName, postgresURL, redisURL, storageProvider, skipPrompts)
 		},
 	}
 
 	// Flags
-	cmd.Flags().StringVarP(&edition, "edition", "e", "", "Edition: community or enterprise")
 	cmd.Flags().StringVar(&postgresURL, "postgres-url", "", "PostgreSQL connection URL")
 	cmd.Flags().StringVar(&redisURL, "redis-url", "", "Redis connection URL")
 	cmd.Flags().StringVar(&storageProvider, "storage-provider", "", "Storage provider: minio or s3")
 	cmd.Flags().BoolVar(&skipPrompts, "skip-prompts", false, "Skip interactive prompts (requires all values via flags)")
 
-	// Mark edition as required when not skipping prompts
-	cmd.MarkFlagRequired("edition")
-
 	return cmd
 }
 
-func runCreate(_ context.Context, projectName, edition, postgresURL, redisURL, storageProvider string, skipPrompts bool) error {
+func runCreate(_ context.Context, projectName, postgresURL, redisURL, storageProvider string, skipPrompts bool) error {
 	// Validate project name if not provided via args
 	if projectName == "" && !skipPrompts {
 		// Will prompt for it
@@ -74,8 +70,7 @@ func runCreate(_ context.Context, projectName, edition, postgresURL, redisURL, s
 	// Interactive prompts if needed
 	if !skipPrompts {
 		var err error
-		// FIX: Changed promptForProjectDetails to promptForProjectSettings to match the function definition
-		projectName, edition, postgresURL, redisURL, storageProvider, err = promptForProjectSettings(projectName, edition, postgresURL, redisURL, storageProvider)
+		projectName, postgresURL, redisURL, storageProvider, err = promptForProjectSettings(projectName, postgresURL, redisURL, storageProvider)
 		if err != nil {
 			return fmt.Errorf("failed to prompt for project details: %w", err)
 		}
@@ -85,16 +80,8 @@ func runCreate(_ context.Context, projectName, edition, postgresURL, redisURL, s
 	if projectName == "" {
 		return fmt.Errorf("project name is required")
 	}
-	if edition == "" {
-		return fmt.Errorf("edition is required")
-	}
 	if storageProvider == "" {
 		return fmt.Errorf("storage provider is required")
-	}
-
-	// Validate edition
-	if edition != "community" && edition != "enterprise" {
-		return fmt.Errorf("edition must be 'community' or 'enterprise'")
 	}
 
 	// Validate storage provider
@@ -113,7 +100,7 @@ func runCreate(_ context.Context, projectName, edition, postgresURL, redisURL, s
 	}
 
 	// Download and extract template
-	templatePath, err := downloadTemplate(edition, version.RuntimeVersion)
+	templatePath, err := downloadTemplate(version.RuntimeVersion)
 	if err != nil {
 		return fmt.Errorf("download template: %w", err)
 	}
@@ -138,16 +125,16 @@ func runCreate(_ context.Context, projectName, edition, postgresURL, redisURL, s
 		return fmt.Errorf("generate .env.example: %w", err)
 	}
 
-	if err := generateReadme(projectDir, projectName, edition); err != nil {
+	if err := generateReadme(projectDir, projectName); err != nil {
 		return fmt.Errorf("generate README.md: %w", err)
 	}
 
-	if err := generateProjectMetadata(projectDir, projectName, edition, version.RuntimeVersion); err != nil {
+	if err := generateProjectMetadata(projectDir, projectName, version.RuntimeVersion); err != nil {
 		return fmt.Errorf("generate project metadata: %w", err)
 	}
 
 	// Print success message
-	printSuccessMessage(projectDir, projectName, edition)
+	printSuccessMessage(projectDir, projectName)
 
 	return nil
 }
@@ -163,28 +150,16 @@ func validateProjectName(name string) error {
 	return nil
 }
 
-func promptForProjectSettings(projectName, edition, postgresURL, redisURL, storageProvider string) (string, string, string, string, string, error) {
+func promptForProjectSettings(projectName, postgresURL, redisURL, storageProvider string) (string, string, string, string, error) {
 	reader := bufio.NewReader(os.Stdin)
 
 	if projectName == "" {
 		fmt.Print("Project name: ")
 		input, err := reader.ReadString('\n')
 		if err != nil {
-			return "", "", "", "", "", fmt.Errorf("read project name: %w", err)
+			return "", "", "", "", fmt.Errorf("read project name: %w", err)
 		}
 		projectName = strings.TrimSpace(input)
-	}
-
-	if edition == "" {
-		fmt.Print("Edition (community/enterprise) [community]: ")
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			return "", "", "", "", "", fmt.Errorf("read edition: %w", err)
-		}
-		edition = strings.TrimSpace(input)
-		if edition == "" {
-			edition = "community"
-		}
 	}
 
 	if postgresURL == "" {
@@ -207,7 +182,7 @@ func promptForProjectSettings(projectName, edition, postgresURL, redisURL, stora
 		fmt.Print("Storage provider (minio/s3) [minio]: ")
 		input, err := reader.ReadString('\n')
 		if err != nil {
-			return "", "", "", "", "", fmt.Errorf("read storage provider: %w", err)
+			return "", "", "", "", fmt.Errorf("read storage provider: %w", err)
 		}
 		storageProvider = strings.TrimSpace(input)
 		if storageProvider == "" {
@@ -215,7 +190,7 @@ func promptForProjectSettings(projectName, edition, postgresURL, redisURL, stora
 		}
 	}
 
-	return projectName, edition, postgresURL, redisURL, storageProvider, nil
+	return projectName, postgresURL, redisURL, storageProvider, nil
 }
 
 // toModuleName converts project name to a suitable module name (snake_case)
@@ -223,31 +198,23 @@ func toModuleName(projectName string) string {
 	return strings.ToLower(projectName)
 }
 
-func downloadTemplate(edition, version string) (string, error) {
+func downloadTemplate(version string) (string, error) {
 	// Create temp directory for template
 	tempDir, err := os.MkdirTemp("", "forge-template-*")
 	if err != nil {
 		return "", fmt.Errorf("create temp directory: %w", err)
 	}
 
-	// Determine template URL based on edition
-	var templateURL string
-	if edition == "enterprise" {
-		templateURL = fmt.Sprintf("https://github.com/AARCSX/forge-enterprise-template/releases/download/%s/forge-enterprise-template-%s.tar.gz", version, version)
-	} else {
-		templateURL = fmt.Sprintf("https://github.com/AARCSX/forge-community-template/releases/download/%s/forge-community-template-%s.tar.gz", version, version)
+	templateURL, err := resolveTemplateURL(version)
+	if err != nil {
+		return "", err
 	}
 
-	// Download template
 	resp, err := http.Get(templateURL)
 	if err != nil {
-		return "", fmt.Errorf("download template: %w", err)
+		return "", fmt.Errorf("download template from %s: %w", templateURL, err)
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to download template: %s", resp.Status)
-	}
 
 	// Save to file
 	templatePath := filepath.Join(tempDir, "template.tar.gz")
@@ -288,6 +255,50 @@ func downloadTemplate(edition, version string) (string, error) {
 		return filepath.Join(extractedPath, entries[0].Name()), nil
 	}
 	return extractedPath, nil
+}
+
+func resolveTemplateURL(requestedVersion string) (string, error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+	attemptedURLs := buildTemplateCandidateURLs(requestedVersion)
+
+	for _, templateURL := range attemptedURLs {
+		resp, err := client.Head(templateURL)
+		if err != nil {
+			continue
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			return templateURL, nil
+		}
+	}
+
+	return "", fmt.Errorf(
+		"failed to resolve community template URL. expected a release asset named forge-template-<version>.tar.gz in AARCSX/AARCSX_Forge. tried: %s",
+		strings.Join(attemptedURLs, ", "),
+	)
+}
+
+func buildTemplateCandidateURLs(requestedVersion string) []string {
+	candidateVersions := make([]string, 0, 2)
+	for _, candidate := range []string{requestedVersion, version.CLIVersion} {
+		if candidate != "" && !slices.Contains(candidateVersions, candidate) {
+			candidateVersions = append(candidateVersions, candidate)
+		}
+	}
+
+	urls := make([]string, 0, len(candidateVersions)*2)
+	for _, candidateVersion := range candidateVersions {
+		for _, tag := range []string{candidateVersion, "v" + candidateVersion} {
+			urls = append(urls, fmt.Sprintf(
+				"https://github.com/AARCSX/AARCSX_Forge/releases/download/%s/forge-template-%s.tar.gz",
+				tag,
+				candidateVersion,
+			))
+		}
+	}
+
+	return urls
 }
 
 func copyDirectory(src, dst string) error {
@@ -377,9 +388,9 @@ HTTP_ADDR=:8080
 	return os.WriteFile(path, []byte(envExample), 0644)
 }
 
-func generateReadme(projectDir, projectName, edition string) error {
+func generateReadme(projectDir, projectName string) error {
 	readme := fmt.Sprintf(`# %s
-A Forge-powered %s edition project.
+A Forge-powered community project.
 
 ## Getting Started
 
@@ -405,17 +416,16 @@ see the Forge documentation.
 
 ## License
 
-This project is proprietary software.
-`, projectName, edition)
+This project is open source software.
+`, projectName)
 
 	path := filepath.Join(projectDir, "README.md")
 	return os.WriteFile(path, []byte(readme), 0644)
 }
 
-func generateProjectMetadata(projectDir, projectName, edition, forgeVersion string) error {
+func generateProjectMetadata(projectDir, projectName, forgeVersion string) error {
 	metadata := map[string]interface{}{
 		"project_name":  projectName,
-		"edition":       edition,
 		"forge_version": forgeVersion,
 		"created_at":    time.Now().UTC().Format(time.RFC3339),
 	}
@@ -434,11 +444,10 @@ func generateProjectMetadata(projectDir, projectName, edition, forgeVersion stri
 	return os.WriteFile(path, yamlData, 0644)
 }
 
-func printSuccessMessage(projectDir, projectName, edition string) {
+func printSuccessMessage(projectDir, projectName string) {
 	fmt.Printf("\n🎉 Successfully created Forge project '%s'!\n\n", projectName)
 	fmt.Printf("Project details:\n")
 	fmt.Printf("  • Name: %s\n", projectName)
-	fmt.Printf("  • Edition: %s\n", edition)
 	fmt.Printf("  • Location: %s\n", projectDir)
 	fmt.Printf("\nNext steps:\n")
 	fmt.Printf("  1. cd %s\n", projectName)

@@ -34,7 +34,6 @@ func runVersion(_ *cobra.Command) error {
 	if metadata, err := readProjectMetadata(); err == nil {
 		fmt.Println("\nCurrent Project:")
 		fmt.Printf("  Name: %s\n", metadata.ProjectName)
-		fmt.Printf("  Edition: %s\n", metadata.Edition)
 		fmt.Printf("  Forge Runtime Version: %s\n", metadata.ForgeVersion)
 		fmt.Printf("  Created At: %s\n", metadata.CreatedAt.Format("2006-01-02T15:04:05Z"))
 	} else if !os.IsNotExist(err) {
@@ -47,10 +46,9 @@ func runVersion(_ *cobra.Command) error {
 
 // ProjectMetadata represents the .forge/project.yaml file
 type ProjectMetadata struct {
-	ProjectName string    `yaml:"project_name"`
-	Edition     string    `yaml:"edition"`
-	ForgeVersion string   `yaml:"forge_version"`
-	CreatedAt   time.Time `yaml:"created_at"`
+	ProjectName  string    `yaml:"project_name"`
+	ForgeVersion string    `yaml:"forge_version"`
+	CreatedAt    time.Time `yaml:"created_at"`
 }
 
 func readProjectMetadata() (*ProjectMetadata, error) {
