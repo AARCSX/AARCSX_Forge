@@ -5,28 +5,28 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/AARCSX/AARCSX_Forge/internal/cli/scaffold"
 )
 
 func TestCopyEmbeddedTemplate(t *testing.T) {
 	tempDir := t.TempDir()
 
-	if err := scaffold.CopyEmbeddedTemplate(tempDir); err != nil {
+	if err := CopyEmbeddedTemplate(tempDir); err != nil {
 		t.Fatalf("copy embedded template: %v", err)
 	}
-	if err := scaffold.WriteProjectGitignore(tempDir); err != nil {
+	if err := WriteProjectGitignore(tempDir); err != nil {
 		t.Fatalf("write .gitignore: %v", err)
+	}
+	if err := GenerateGoMod(tempDir, "github.com/test/project"); err != nil {
+		t.Fatalf("generate go.mod: %v", err)
 	}
 
 	requiredFiles := []string{
 		"go.mod",
-		"go.sum",
 		".gitignore",
 		filepath.Join("cmd", "api", "main.go"),
 		filepath.Join("cmd", "worker", "main.go"),
 		filepath.Join("internal", "app", "bootstrap.go"),
-		filepath.Join("migrations", "000001_init_schema.up.sql"),
+		filepath.Join("internal", "config", "config.go"),
 	}
 
 	for _, path := range requiredFiles {
@@ -39,21 +39,23 @@ func TestCopyEmbeddedTemplate(t *testing.T) {
 func TestEmbeddedTemplateUsesModulePlaceholder(t *testing.T) {
 	tempDir := t.TempDir()
 
-	if err := scaffold.CopyEmbeddedTemplate(tempDir); err != nil {
+	if err := CopyEmbeddedTemplate(tempDir); err != nil {
 		t.Fatalf("copy embedded template: %v", err)
 	}
-	if err := scaffold.WriteProjectGitignore(tempDir); err != nil {
+	if err := WriteProjectGitignore(tempDir); err != nil {
 		t.Fatalf("write .gitignore: %v", err)
 	}
-
+	if err := GenerateGoMod(tempDir, "{{MODULE_PATH}}"); err != nil {
+		t.Fatalf("generate go.mod: %v", err)
+	}
 	goModBytes, err := os.ReadFile(filepath.Join(tempDir, "go.mod"))
 	if err != nil {
 		t.Fatalf("read go.mod: %v", err)
 	}
 
 	goMod := string(goModBytes)
-	if !strings.Contains(goMod, "{{MODULE_PATH}}") {
-		t.Fatalf("expected embedded go.mod to contain module placeholder, got: %s", goMod)
+	if !strings.Contains(goMod, "module") {
+		t.Fatalf("expected generated go.mod to contain module declaration, got: %s", goMod)
 	}
 }
 

@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AARCSX/AARCSX_Forge/internal/cli/scaffold"
 	"github.com/AARCSX/AARCSX_Forge/pkg/version"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -96,18 +95,24 @@ func runCreate(_ context.Context, projectName, postgresURL, redisURL, storagePro
 	}
 
 	// Copy the embedded community template into the project directory.
-	if err := scaffold.CopyEmbeddedTemplate(projectDir); err != nil {
+	if err := CopyEmbeddedTemplate(projectDir); err != nil {
 		return fmt.Errorf("copy template: %w", err)
 	}
-	if err := scaffold.WriteProjectGitignore(projectDir); err != nil {
+	if err := WriteProjectGitignore(projectDir); err != nil {
 		return fmt.Errorf("write .gitignore: %w", err)
 	}
 
+	// Generate go.mod with the module name
+	moduleName := toModuleName(projectName)
+	if err := GenerateGoMod(projectDir, moduleName); err != nil {
+		return fmt.Errorf("generate go.mod: %w", err)
+	}
+
 	// Replace placeholders in files
-	if err := scaffold.ReplacePlaceholders(projectDir, map[string]string{
+	if err := replacePlaceholders(projectDir, map[string]string{
 		"{{PROJECT_NAME}}":  projectName,
-		"{{MODULE_NAME}}":   toModuleName(projectName),
-		"{{MODULE_PATH}}":   toModuleName(projectName),
+		"{{MODULE_NAME}}":   moduleName,
+		"{{MODULE_PATH}}":   moduleName,
 		"{{FORGE_VERSION}}": version.RuntimeVersion,
 	}); err != nil {
 		return fmt.Errorf("replace placeholders: %w", err)
