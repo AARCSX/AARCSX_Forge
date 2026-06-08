@@ -1,6 +1,7 @@
 package forge
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -163,36 +164,54 @@ func validateProjectName(name string) error {
 }
 
 func promptForProjectSettings(projectName, edition, postgresURL, redisURL, storageProvider string) (string, string, string, string, string, error) {
+	reader := bufio.NewReader(os.Stdin)
+
 	if projectName == "" {
 		fmt.Print("Project name: ")
-		if _, err := fmt.Scanln(&projectName); err != nil {
+		input, err := reader.ReadString('\n')
+		if err != nil {
 			return "", "", "", "", "", fmt.Errorf("read project name: %w", err)
 		}
+		projectName = strings.TrimSpace(input)
 	}
 
 	if edition == "" {
-		fmt.Print("Edition (community/enterprise): ")
-		if _, err := fmt.Scanln(&edition); err != nil {
+		fmt.Print("Edition (community/enterprise) [community]: ")
+		input, err := reader.ReadString('\n')
+		if err != nil {
 			return "", "", "", "", "", fmt.Errorf("read edition: %w", err)
+		}
+		edition = strings.TrimSpace(input)
+		if edition == "" {
+			edition = "community"
 		}
 	}
 
 	if postgresURL == "" {
 		fmt.Print("PostgreSQL URL (optional): ")
-		// Using Scanln can easily fail on empty enters for optional fields,
-		// but keeping your architecture placeholder intact.
-		_, _ = fmt.Scanln(&postgresURL)
+		input, err := reader.ReadString('\n')
+		if err == nil {
+			postgresURL = strings.TrimSpace(input)
+		}
 	}
 
 	if redisURL == "" {
 		fmt.Print("Redis URL (optional): ")
-		_, _ = fmt.Scanln(&redisURL)
+		input, err := reader.ReadString('\n')
+		if err == nil {
+			redisURL = strings.TrimSpace(input)
+		}
 	}
 
 	if storageProvider == "" {
-		fmt.Print("Storage provider (minio/s3): ")
-		if _, err := fmt.Scanln(&storageProvider); err != nil {
+		fmt.Print("Storage provider (minio/s3) [minio]: ")
+		input, err := reader.ReadString('\n')
+		if err != nil {
 			return "", "", "", "", "", fmt.Errorf("read storage provider: %w", err)
+		}
+		storageProvider = strings.TrimSpace(input)
+		if storageProvider == "" {
+			storageProvider = "minio"
 		}
 	}
 
