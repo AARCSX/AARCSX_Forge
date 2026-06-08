@@ -30,7 +30,7 @@ It is **not** just a minimal viable product generator. Forge generates a system 
 
 *   🚀 **Instant Scaffolding**: Create a full project in seconds, not days.
 *   🏗️ **Clean Architecture**: Domain-driven, modular monolith design ensuring separation of concerns (Handlers → Services → Repositories).
-*   🔐 **Enterprise Security**: Built-in JWT authentication flows, Argon2 password hashing, and secure tenant middlewares.
+*   🔐 **Production-Ready Security**: Built-in JWT authentication flows, Argon2 password hashing, and secure tenant middlewares.
 *   📊 **Deep Observability**: Pre-wired with structured logging (`zap`), OpenTelemetry tracing, and metrics ready for Prometheus/Grafana.
 *   🗄️ **Data & Storage**: Ready-to-use PostgreSQL interfaces, Redis caching layers, and S3/MinIO abstract storage providers.
 *   🩺 **Built-in Diagnostics**: Run `forge doctor` to instantly verify your local development environment (Go, Docker, DBs).
@@ -39,7 +39,7 @@ It is **not** just a minimal viable product generator. Forge generates a system 
 
 ## 📦 Installation
 
-Since Forge CLI is open source and published via GoReleaser, you can install it instantly.
+Since Forge CLI is published via GoReleaser, you can install it instantly.
 
 ### Option 1: Go Install (Recommended)
 If you have Go installed, you can pull the latest version directly:
@@ -58,10 +58,10 @@ Don't have Go installed locally? No problem! Head over to the [Releases Page](ht
 Creating your next production backend is as simple as running:
 
 ```bash
-# Start the interactive project creator
-forge-cli create
+# Create a new project
+forge-cli create my_service
 ```
-*(You will be prompted to set up your PostgreSQL, Redis, and Storage configurations).*
+You will be prompted to set up your PostgreSQL, Redis, and storage configuration.
 
 Want to check if your machine has everything needed to run your new Forge project?
 ```bash
