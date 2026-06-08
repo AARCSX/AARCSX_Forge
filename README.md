@@ -33,6 +33,7 @@ It is **not** just a minimal viable product generator. Forge generates a system 
 *   🔐 **Production-Ready Security**: Built-in JWT authentication flows, Argon2 password hashing, and secure tenant middlewares.
 *   📊 **Deep Observability**: Pre-wired with structured logging (`zap`), OpenTelemetry tracing, and metrics ready for Prometheus/Grafana.
 *   🗄️ **Data & Storage**: Ready-to-use PostgreSQL interfaces, Redis caching layers, and S3/MinIO abstract storage providers.
+*   📦 **Bundled Templates**: The project skeleton ships inside the CLI, so `forge-cli create` works without downloading remote templates.
 *   🩺 **Built-in Diagnostics**: Run `forge doctor` to instantly verify your local development environment (Go, Docker, DBs).
 
 ---

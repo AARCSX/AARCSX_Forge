@@ -64,7 +64,7 @@ func shouldSkipFile(path string) bool {
 
 	// Skip hidden files and directories (except those we specifically want to process)
 	if strings.HasPrefix(filepath.Base(path), ".") &&
-	   !strings.HasPrefix(filepath.Base(path), ".forge") {
+		!strings.HasPrefix(filepath.Base(path), ".forge") {
 		return true
 	}
 

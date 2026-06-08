@@ -1,43 +1,100 @@
 package forge
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
 
-func TestBuildTemplateCandidateURLsCommunity(t *testing.T) {
-	urls := buildTemplateCandidateURLs("1.0.0")
+	"github.com/AARCSX/AARCSX_Forge/internal/cli/scaffold"
+)
 
-	expected := []string{
-		"https://github.com/AARCSX/AARCSX_Forge/releases/download/1.0.0/forge-template-1.0.0.tar.gz",
-		"https://github.com/AARCSX/AARCSX_Forge/releases/download/v1.0.0/forge-template-1.0.0.tar.gz",
-		"https://github.com/AARCSX/AARCSX_Forge/releases/download/1.0.1/forge-template-1.0.1.tar.gz",
-		"https://github.com/AARCSX/AARCSX_Forge/releases/download/v1.0.1/forge-template-1.0.1.tar.gz",
+func TestCopyEmbeddedTemplate(t *testing.T) {
+	tempDir := t.TempDir()
+
+	if err := scaffold.CopyEmbeddedTemplate(tempDir); err != nil {
+		t.Fatalf("copy embedded template: %v", err)
+	}
+	if err := scaffold.WriteProjectGitignore(tempDir); err != nil {
+		t.Fatalf("write .gitignore: %v", err)
 	}
 
-	if len(urls) != len(expected) {
-		t.Fatalf("expected %d URLs, got %d: %#v", len(expected), len(urls), urls)
+	requiredFiles := []string{
+		"go.mod",
+		"go.sum",
+		".gitignore",
+		filepath.Join("cmd", "api", "main.go"),
+		filepath.Join("cmd", "worker", "main.go"),
+		filepath.Join("internal", "app", "bootstrap.go"),
+		filepath.Join("migrations", "000001_init_schema.up.sql"),
 	}
 
-	for index, want := range expected {
-		if urls[index] != want {
-			t.Fatalf("expected URL %d to be %q, got %q", index, want, urls[index])
+	for _, path := range requiredFiles {
+		if _, err := os.Stat(filepath.Join(tempDir, path)); err != nil {
+			t.Fatalf("expected template file %s: %v", path, err)
 		}
 	}
 }
 
-func TestBuildTemplateCandidateURLsDeduplicatesVersions(t *testing.T) {
-	urls := buildTemplateCandidateURLs("1.0.1")
+func TestEmbeddedTemplateUsesModulePlaceholder(t *testing.T) {
+	tempDir := t.TempDir()
 
-	expected := []string{
-		"https://github.com/AARCSX/AARCSX_Forge/releases/download/1.0.1/forge-template-1.0.1.tar.gz",
-		"https://github.com/AARCSX/AARCSX_Forge/releases/download/v1.0.1/forge-template-1.0.1.tar.gz",
+	if err := scaffold.CopyEmbeddedTemplate(tempDir); err != nil {
+		t.Fatalf("copy embedded template: %v", err)
+	}
+	if err := scaffold.WriteProjectGitignore(tempDir); err != nil {
+		t.Fatalf("write .gitignore: %v", err)
 	}
 
-	if len(urls) != len(expected) {
-		t.Fatalf("expected %d URLs, got %d: %#v", len(expected), len(urls), urls)
+	goModBytes, err := os.ReadFile(filepath.Join(tempDir, "go.mod"))
+	if err != nil {
+		t.Fatalf("read go.mod: %v", err)
 	}
 
-	for index, want := range expected {
-		if urls[index] != want {
-			t.Fatalf("expected URL %d to be %q, got %q", index, want, urls[index])
-		}
+	goMod := string(goModBytes)
+	if !strings.Contains(goMod, "{{MODULE_PATH}}") {
+		t.Fatalf("expected embedded go.mod to contain module placeholder, got: %s", goMod)
+	}
+}
+
+func TestRunCreateGeneratesProjectFromEmbeddedTemplate(t *testing.T) {
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+
+	tempDir := t.TempDir()
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("chdir temp dir: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(originalWD)
+	}()
+
+	projectName := "my_service"
+	if err := runCreate(t.Context(), projectName, "", "", "minio", true); err != nil {
+		t.Fatalf("runCreate: %v", err)
+	}
+
+	goModBytes, err := os.ReadFile(filepath.Join(tempDir, projectName, "go.mod"))
+	if err != nil {
+		t.Fatalf("read generated go.mod: %v", err)
+	}
+
+	goMod := string(goModBytes)
+	if strings.Contains(goMod, "{{MODULE_PATH}}") {
+		t.Fatalf("expected generated go.mod placeholders to be replaced, got: %s", goMod)
+	}
+	if !strings.Contains(goMod, "module my_service") {
+		t.Fatalf("expected generated go.mod to use project module path, got: %s", goMod)
+	}
+
+	gitignoreBytes, err := os.ReadFile(filepath.Join(tempDir, projectName, ".gitignore"))
+	if err != nil {
+		t.Fatalf("read generated .gitignore: %v", err)
+	}
+
+	if !strings.Contains(string(gitignoreBytes), ".env") {
+		t.Fatalf("expected generated .gitignore to include env ignore rules, got: %s", string(gitignoreBytes))
 	}
 }

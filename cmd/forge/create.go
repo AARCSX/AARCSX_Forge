@@ -4,13 +4,9 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -99,22 +95,19 @@ func runCreate(_ context.Context, projectName, postgresURL, redisURL, storagePro
 		return fmt.Errorf("create project directory: %w", err)
 	}
 
-	// Download and extract template
-	templatePath, err := downloadTemplate(version.RuntimeVersion)
-	if err != nil {
-		return fmt.Errorf("download template: %w", err)
-	}
-	defer os.RemoveAll(templatePath) // Clean up extracted template
-
-	// Copy template to project directory
-	if err := copyDirectory(templatePath, projectDir); err != nil {
+	// Copy the embedded community template into the project directory.
+	if err := scaffold.CopyEmbeddedTemplate(projectDir); err != nil {
 		return fmt.Errorf("copy template: %w", err)
+	}
+	if err := scaffold.WriteProjectGitignore(projectDir); err != nil {
+		return fmt.Errorf("write .gitignore: %w", err)
 	}
 
 	// Replace placeholders in files
 	if err := scaffold.ReplacePlaceholders(projectDir, map[string]string{
 		"{{PROJECT_NAME}}":  projectName,
 		"{{MODULE_NAME}}":   toModuleName(projectName),
+		"{{MODULE_PATH}}":   toModuleName(projectName),
 		"{{FORGE_VERSION}}": version.RuntimeVersion,
 	}); err != nil {
 		return fmt.Errorf("replace placeholders: %w", err)
@@ -193,156 +186,9 @@ func promptForProjectSettings(projectName, postgresURL, redisURL, storageProvide
 	return projectName, postgresURL, redisURL, storageProvider, nil
 }
 
-// toModuleName converts project name to a suitable module name (snake_case)
+// toModuleName converts project name to a suitable lowercase module path.
 func toModuleName(projectName string) string {
 	return strings.ToLower(projectName)
-}
-
-func downloadTemplate(version string) (string, error) {
-	// Create temp directory for template
-	tempDir, err := os.MkdirTemp("", "forge-template-*")
-	if err != nil {
-		return "", fmt.Errorf("create temp directory: %w", err)
-	}
-
-	templateURL, err := resolveTemplateURL(version)
-	if err != nil {
-		return "", err
-	}
-
-	resp, err := http.Get(templateURL)
-	if err != nil {
-		return "", fmt.Errorf("download template from %s: %w", templateURL, err)
-	}
-	defer resp.Body.Close()
-
-	// Save to file
-	templatePath := filepath.Join(tempDir, "template.tar.gz")
-	out, err := os.Create(templatePath)
-	if err != nil {
-		return "", fmt.Errorf("create template file: %w", err)
-	}
-	defer out.Close()
-
-	if _, err := io.Copy(out, resp.Body); err != nil {
-		return "", fmt.Errorf("save template: %w", err)
-	}
-
-	// Extract template
-	extractedPath := filepath.Join(tempDir, "extracted")
-	if err := os.MkdirAll(extractedPath, 0755); err != nil {
-		return "", fmt.Errorf("create extract directory: %w", err)
-	}
-
-	// Extract tar.gz
-	cmd := exec.Command("tar", "-xzf", templatePath, "-C", extractedPath)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("extract template: %w, output: %s", err, string(output))
-	}
-
-	// Find the extracted directory
-	entries, err := os.ReadDir(extractedPath)
-	if err != nil {
-		return "", fmt.Errorf("read extracted directory: %w", err)
-	}
-	if len(entries) == 0 {
-		return "", fmt.Errorf("no content found in extracted template")
-	}
-
-	// If the archive contains a single folder wrapping everything, return that.
-	// Otherwise, return the extracted path root itself.
-	if len(entries) == 1 && entries[0].IsDir() {
-		return filepath.Join(extractedPath, entries[0].Name()), nil
-	}
-	return extractedPath, nil
-}
-
-func resolveTemplateURL(requestedVersion string) (string, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-	attemptedURLs := buildTemplateCandidateURLs(requestedVersion)
-
-	for _, templateURL := range attemptedURLs {
-		resp, err := client.Head(templateURL)
-		if err != nil {
-			continue
-		}
-		resp.Body.Close()
-
-		if resp.StatusCode == http.StatusOK {
-			return templateURL, nil
-		}
-	}
-
-	return "", fmt.Errorf(
-		"failed to resolve community template URL. expected a release asset named forge-template-<version>.tar.gz in AARCSX/AARCSX_Forge. tried: %s",
-		strings.Join(attemptedURLs, ", "),
-	)
-}
-
-func buildTemplateCandidateURLs(requestedVersion string) []string {
-	candidateVersions := make([]string, 0, 2)
-	for _, candidate := range []string{requestedVersion, version.CLIVersion} {
-		if candidate != "" && !slices.Contains(candidateVersions, candidate) {
-			candidateVersions = append(candidateVersions, candidate)
-		}
-	}
-
-	urls := make([]string, 0, len(candidateVersions)*2)
-	for _, candidateVersion := range candidateVersions {
-		for _, tag := range []string{candidateVersion, "v" + candidateVersion} {
-			urls = append(urls, fmt.Sprintf(
-				"https://github.com/AARCSX/AARCSX_Forge/releases/download/%s/forge-template-%s.tar.gz",
-				tag,
-				candidateVersion,
-			))
-		}
-	}
-
-	return urls
-}
-
-func copyDirectory(src, dst string) error {
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return fmt.Errorf("read source directory: %w", err)
-	}
-
-	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
-		dstPath := filepath.Join(dst, entry.Name())
-
-		if entry.IsDir() {
-			if err := os.MkdirAll(dstPath, entry.Type().Perm()); err != nil {
-				return fmt.Errorf("create directory %s: %w", dstPath, err)
-			}
-			if err := copyDirectory(srcPath, dstPath); err != nil {
-				return err
-			}
-		} else {
-			if err := copyFile(srcPath, dstPath); err != nil {
-				return fmt.Errorf("copy file %s: %w", srcPath, err)
-			}
-		}
-	}
-
-	return nil
-}
-
-func copyFile(src, dst string) error {
-	source, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("open source file: %w", err)
-	}
-	defer source.Close()
-
-	destination, err := os.Create(dst)
-	if err != nil {
-		return fmt.Errorf("create destination file: %w", err)
-	}
-	defer destination.Close()
-
-	_, err = io.Copy(destination, source)
-	return err
 }
 
 func generateEnvExample(projectDir, postgresURL, redisURL, storageProvider string) error {
