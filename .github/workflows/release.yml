@@ -18,7 +18,17 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: goreleaser/goreleaser-action@v6
+      - id: goreleaser_first_attempt
+        continue-on-error: true
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - if: steps.goreleaser_first_attempt.outcome == 'failure'
+        uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: latest
